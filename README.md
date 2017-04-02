@@ -5,7 +5,7 @@ The other files were provided by the instructor Sean Davis. The BMP, PNG, anf TX
 
 To run the code, 
 
-  >> make
+  >> make;
   >> encoderRunner.out [fileName]
   
   Encoder works by going through the entire file and counting the instances of each of the 256 possible characters. 
