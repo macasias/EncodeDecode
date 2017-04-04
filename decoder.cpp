@@ -1,8 +1,8 @@
 //  Author: Sean Davis
 
 #include "decoder.h"
-
-//using namespace std;
+#include <iostream>
+using namespace std;
 
 Decoder::Decoder()
 {
@@ -19,20 +19,10 @@ Decoder::~Decoder()
 void reAssignBits(HuffNode *node, unsigned int bits, int position, unsigned int *character,
                 unsigned int *codeLength)
 {
-  if(node->left == NULL)
+  if(node->left == NULL) // || node->right == NULL)
   {
     character[node->character] = bits;
     codeLength[node->character] = position;
-/*
-    cout << (unsigned char)node->character << " ";
-
-    for( int j = 0x200; j > 0; j >>= 1)
-      if(character[node->character] & j)
-        cout << '1';
-      else cout << '0';
-
-    cout << endl;
-*/
 
     return;
   }
@@ -46,42 +36,46 @@ void reAssignBits(HuffNode *node, unsigned int bits, int position, unsigned int 
 }
 
 
-
-int decodeMessage(HuffNode *node,  unsigned int workbench, int codeLength,
-                  unsigned char *decodedMessage, int decodePos)
+/*
+void decodeMessage(HuffNode *node,  int encodePos, unsigned char *encodedMessage,
+                  unsigned char *decodedMessage, int decodePos, int bit,
+                  int bitCounter)
 { //needs to return the length of the code so it can subtract it from bitCounter
-  int maybe = 0;  
+  if(bitCounter == 8)
+  {
+    encodePos++;
+    bit = 1;
+    bitCounter -= 8;
+  }
 
   if(node->left == NULL) //only need to check one child
   {
-    decodedMessage[decodePos] = (unsigned char)(node->character);
-
-    return codeLength;
+    decodedMessage[decodePos++] = (node->letter);
+    return;
   }
 
-  else if(workbench & 1) //if rightmost bit is 1, go right
-    maybe =  decodeMessage(node->right, (workbench >> 1), (codeLength + 1),
-                  decodedMessage, decodePos);
+  else if(encodedMessage[encodePos++] & bit) //if rightmost bit is 1, go right
+    decodeMessage(node->right, encodePos, encodedMessage,
+                  decodedMessage, decodePos, (bit <<= 1), (bitCounter+1));
 
 
   else //going left
-    maybe = decodeMessage(node->left, (workbench >> 1), (codeLength + 1),
-                  decodedMessage, decodePos);
+    decodeMessage(node->left, encodePos, encodedMessage,
+                  decodedMessage, decodePos, (bit <<= 1), (bitCounter+1));
 
-  return maybe;
+
 }
-
+*/
 
 
 void Decoder::decode(const unsigned char* encodedMessage, const int encodedSize, 
   unsigned char* decodedMessage, int *decodedSize)
 {
-  ///////////////////////////////////
-  //Here is where I read in first 4 bytes so I know how far in to read
-  //////////////////////////////////
 
+//  cout << "Decoder" << endl;
   int numCharsUsed = (int)encodedMessage[0]; 
   //so the code knos how far to read in
+
 
   int pos = 1;
 
@@ -92,17 +86,23 @@ void Decoder::decode(const unsigned char* encodedMessage, const int encodedSize,
   //and subsequently rebuilt huffTree and reassign bits
   //////////////////////////////////
 //  cout << numCharsUsed << endl;
+  if( numCharsUsed == 0 )
+    numCharsUsed = 256;
 
   for( int i = 0; i < numCharsUsed; i++ )
   {
-    counts[encodedMessage[pos]] = (int)(encodedMessage[pos+1]) +
-      (int)(encodedMessage[pos+2] << 8) + (int)(encodedMessage[pos+3] << 16)
-      + (int)(encodedMessage[pos+4] << 24);
+    counts[encodedMessage[pos]] = (unsigned int)(encodedMessage[pos+1]) +
+      (unsigned int)(encodedMessage[pos+2] << 8) + (unsigned int)(encodedMessage[pos+3] << 16)
+      + (unsigned int)(encodedMessage[pos+4] << 24);
     //adds up the counts and increases pos by 5
     pos = pos + 5; 
   }
 
-//  cout << "Count of a: " << counts['!'] << endl;
+//  cout << "Tree ended at: " << pos << endl;
+
+//  for(int i = 0; i < 256; i++)
+//    cout << i << " " << counts[i] << endl;
+
 
   BinaryHeap <HuffNode*> huffHeap(256);
   huffHeap.currentSize = 0;
@@ -110,9 +110,8 @@ void Decoder::decode(const unsigned char* encodedMessage, const int encodedSize,
   for(int i = 0; i < 256; i++) //Rebuild your heap for HuffTree
     if(counts[i] != 0)
     {
-      HuffNode *huff = new HuffNode(NULL, NULL, counts[i], i);
+      HuffNode *huff = new HuffNode(NULL, NULL, counts[i], i, (char)i);
       huffHeap.insert(huff);
-//      cout << "Reinserting " << (char)i << " Count: " << counts[i] << endl;
     }
 
   HuffNode *newLeft;
@@ -126,10 +125,9 @@ void Decoder::decode(const unsigned char* encodedMessage, const int encodedSize,
     huffHeap.deleteMin();
     //gets children of try tree again
 
-//    cout << (char)(newLeft->character) << " " << (char)(newRight->character) << endl;
 
     int newCount = newLeft->count + newRight->count; //add counts together
-    HuffNode *tree = new HuffNode(newLeft, newRight, newCount, 1); //creates try
+    HuffNode *tree = new HuffNode(newLeft, newRight, newCount, 1, 1); //creates try
 
     huffHeap.insert(tree); //puts try back into heap
   } //rebuilds huffman tree
@@ -148,101 +146,79 @@ void Decoder::decode(const unsigned char* encodedMessage, const int encodedSize,
 
   reAssignBits(huffHeap.findMin(), bits, 0, characters, codeLength);
 
-/*
-  for(int j = 0x80; j > 0; j >>= 1)
-    if(characters['!'] & j)
-      cout << '1';
-    else cout << '0';
-
-  cout << endl;
-
-  unsigned char test = (unsigned char)characters['a'];
-
-  for(int j = 0x80; j > 0; j >>= 1)
-    if( test & j )
-      cout << '1';
-    else cout << '0';
-
-  cout << endl;
-  //This was me testing to see if I needed to shift the bits over 
-  //before setting an int equal to a char. I did not, encoder should
-  //work the way it is.
-*/
-
-  int bitCounter = 0; //so I know what bit I'm looking at
-  pos = 1281; //encoding is hard-coded to start there
-  unsigned int workbench = 0;
+  unsigned int bitCounter = 0; //so I know what bit I'm looking at
+  pos = 1283; //encoding is hard-coded to start there
   int bit = 1; //to track the specific bit
-  int bitsUsed;
-
-  /////////////////////////////////////
-  //I guess what I'll have to do is just grab one int of data, 
-  //then take it to a function that returns an int
-  //That int will tell me how many bits to shift over when I get back
-  //The function will start at the head of the tree. 
-  //If it reads a 1, go left, if it reads a 0, go right.
-  //Every time it goes, increment 1 each time.
-  //When the node has no children, done. 
-  /////////////////////////////////////
-/*
-  workbench = encodedMessage[pos++];
-  (workbench >> 8) = encodedMessage[pos++];
-  (workbench >> 16) = encodedMessage[pos++];
-  (workbench >> 24) = encodedMessage[pos++];  
-  //supposed to load up the workbench the first time
-*/
-
-  for(int i = 0; i < 4; i++) //because 4 chars to an int
-  {
-    bit = 1;
-    int j = 0;
-    while( j < 8 ) //makes sure bit stays below 8
-    { 
-      if( encodedMessage[pos] & bit )
-        workbench |= 1 << (bitCounter); //set a 1;
-
-      j++;
-      bit <<= 1;
-      bitCounter++;
-    }
-    pos++;
-  } //this loads up workbench for the first time(all 32 bits)
-  
-//  cout << bitCounter << endl; //should be 32
-//  cout << pos << endl; //should be 1285
 
   int decodePos = 0;
+  unsigned int extraBits = encodedMessage[1282];
 
-  while( pos < encodedSize )
+if(extraBits != 0)
+{
+  while(pos < (encodedSize - 1) || bitCounter != extraBits)
   {
-    bitsUsed = decodeMessage(huffHeap.findMin(),workbench, 0,
-                             decodedMessage, decodePos++);
-
-    workbench >>= bitsUsed; //remove the bits we already looked at
+    HuffNode *ptr = huffHeap.findMin();
     
-    bitCounter = bitCounter - bitsUsed;
-
-    while(bitCounter < 24) //while theres enought room for another byte
+    while( ptr->left ) 
     {
-      int j = 0; //counts bits in new byte
-      bit = 1;
-
-      while( j < 8 ) //add another byte
+      if(encodedMessage[pos] & bit)
       {
-        if( encodedMessage[pos] & bit )
-          workbench |= 1 << (bitCounter);
-
-        j++;
+        ptr = ptr->right;
         bit <<= 1;
-        bitCounter = bitCounter+1;
-      
       }
-  
-      pos++;
-    }
-  }
+      else
+      {
+        ptr = ptr->left;
+        bit <<= 1;
+      }
 
-//  cout << (int)decodedMessage[1] << endl;
+      bitCounter++;
+
+      if(bitCounter == 8)
+      {
+        bitCounter = 0;
+        pos++;
+        bit = 1;
+      }
+    }
+
+    decodedMessage[decodePos++] = (ptr->letter);
+
+  }
+}
+
+else {
+  while(pos < (encodedSize) || bitCounter != extraBits)
+  {
+    HuffNode *ptr = huffHeap.findMin();
+
+    while( ptr->left )
+    {
+      if(encodedMessage[pos] & bit)
+      {
+        ptr = ptr->right;
+        bit <<= 1;
+      }
+      else
+      {
+        ptr = ptr->left;
+        bit <<= 1;
+      }
+
+      bitCounter++;
+
+      if(bitCounter == 8)
+      {
+        bitCounter = 0;
+        pos++;
+        bit = 1;
+      }
+    }
+
+    decodedMessage[decodePos++] = (ptr->letter);
+
+  }
+}
   *decodedSize = decodePos;
-//  cout << decodePos << endl;
+
 } // decode()
